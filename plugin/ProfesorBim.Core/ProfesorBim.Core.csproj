@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Núcleo puro (sin tipos de Revit): reglas, motor de validación, cliente HTTP del backend.
+       Se puede probar con xUnit sin Revit instalado. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ProfesorBim.Core</RootNamespace>
+    <AssemblyName>ProfesorBim.Core</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

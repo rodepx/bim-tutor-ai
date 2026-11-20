@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copiar a %AppData%\Autodesk\Revit\Addins\2027\ junto con la carpeta ProfesorBim\ (salida del build). -->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Profesor BIM</Name>
+    <Assembly>ProfesorBim\ProfesorBim.dll</Assembly>
+    <AddInId>4D6CDDB7-4D7C-4FB4-BBBA-2FD9EC8B8741</AddInId>
+    <FullClassName>ProfesorBim.Revit.App</FullClassName>
+    <VendorId>PROFESORBIM</VendorId>
+    <VendorDescription>Agente Profesor BIM - Hackathon BIM + IA</VendorDescription>
+  </AddIn>
+</RevitAddIns>

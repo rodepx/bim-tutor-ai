@@ -1,0 +1,94 @@
+<UserControl x:Class="ProfesorBim.Revit.UI.IssuesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="280" Background="White" FontFamily="Segoe UI" FontSize="12">
+    <UserControl.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="120" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Profesor BIM" FontSize="16" FontWeight="Bold" Foreground="#1E6FB8" Margin="0,0,0,6" />
+
+        <WrapPanel Grid.Row="1">
+            <Button x:Name="ValidateButton" Content="Validar todo" Click="OnValidateAll" />
+            <Button x:Name="SendButton" Content="Enviar al backend" Click="OnSend" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6" VerticalAlignment="Center">
+                <TextBlock Text="Estado CDE:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <ComboBox x:Name="CdeCombo" Width="100" SelectionChanged="OnCdeChanged" />
+            </StackPanel>
+        </WrapPanel>
+
+        <TextBlock Grid.Row="2" x:Name="SummaryText" FontWeight="SemiBold" Margin="0,0,0,4" TextWrapping="Wrap" />
+
+        <ListView Grid.Row="3" x:Name="IssueList" SelectionMode="Single" SelectionChanged="OnIssueSelected"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizingWhenGrouping="True">
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GroupItem">
+                                        <Expander IsExpanded="True">
+                                            <Expander.Header>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" />
+                                                    <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" />
+                                                </StackPanel>
+                                            </Expander.Header>
+                                            <ItemsPresenter />
+                                        </Expander>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GroupStyle.ContainerStyle>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="2,3">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="{Binding SeverityBrush}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="14,0,0,0" />
+                        <TextBlock Text="{Binding Subtitle}" Foreground="Gray" FontSize="11" Margin="14,0,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <Border Grid.Row="4" x:Name="DetailPanel" BorderBrush="#DDD" BorderThickness="1" Padding="8" Margin="0,8,0,0" Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="360">
+                <StackPanel>
+                    <TextBlock x:Name="DetailTitle" FontWeight="Bold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DetailMessage" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <TextBlock Text="¿Por qué importa?" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <TextBlock x:Name="DetailExplanation" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DetailAi" TextWrapping="Wrap" Foreground="#1E6FB8" Margin="0,6,0,0" Visibility="Collapsed" />
+                    <TextBlock x:Name="DetailFixHint" TextWrapping="Wrap" Foreground="Gray" FontStyle="Italic" Margin="0,6,0,0" Visibility="Collapsed" />
+                    <WrapPanel Margin="0,8,0,0">
+                        <Button x:Name="FixButton" Content="Corregir" Click="OnFix" FontWeight="SemiBold" />
+                        <Button x:Name="ZoomButton" Content="Ir al elemento" Click="OnZoom" />
+                        <Button x:Name="ExplainButton" Content="Explicar con IA" Click="OnExplain" />
+                        <Button x:Name="FeedbackButton" Content="No pude, ¿por qué?" Click="OnFeedback" />
+                    </WrapPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock Grid.Row="5" x:Name="StatusText" TextWrapping="Wrap" Foreground="#555" Margin="0,6,0,0" />
+    </Grid>
+</UserControl>

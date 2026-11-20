@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Add-in de Revit 2027 (.NET 10). Salida: ProfesorBim.dll + ProfesorBim.Core.dll + data/ + settings. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ProfesorBim</AssemblyName>
+    <RootNamespace>ProfesorBim.Revit</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == ''">C:\Program Files\Autodesk\Revit 2027\</RevitInstallDir>
+    <!-- Revit referencia ensamblados de WinForms; se suprime el aviso de conflicto de versiones de referencia. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitInstallDir)RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallDir)RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProfesorBim.Core\ProfesorBim.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Datos del repo (solo lectura) copiados a bin/.../data/ -->
+    <None Include="..\..\data\rules.json" Link="data\rules.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\data\uniclass_subset.csv" Link="data\uniclass_subset.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="profesorbim.settings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="ProfesorBim.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
