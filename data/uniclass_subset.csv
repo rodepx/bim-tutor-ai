@@ -1,0 +1,13 @@
+code,title_es,title_en,table,revit_categories,estado
+Ss_20_05_15,Sistemas de cimentación de concreto armado (zapatas),Concrete foundation systems,Ss,OST_StructuralFoundation,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_20_05_65,Sistemas de cimiento corrido,Strip foundation systems,Ss,OST_StructuralFoundation;OST_Walls,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_20_10_10,Sistemas de columnas de concreto armado,Concrete column systems,Ss,OST_StructuralColumns,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_20_10_20,Sistemas de vigas de concreto armado,Concrete beam systems,Ss,OST_StructuralFraming,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_20_10_75,Sistemas de estructura de acero,Steel framing systems,Ss,OST_StructuralFraming;OST_StructuralColumns,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_25_10_20,Sistemas de muros de concreto armado (placas),Concrete wall systems,Ss,OST_Walls,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_25_10_50,Sistemas de muros de albañilería,Masonry wall systems,Ss,OST_Walls,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_25_10_30,Sistemas de tabiquería ligera (drywall),Framed partition systems,Ss,OST_Walls,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_30_10_30,Sistemas de losa maciza de concreto,Concrete slab systems,Ss,OST_Floors,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_30_10_35,Sistemas de losa aligerada,Hollow-pot slab systems,Ss,OST_Floors,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_25_30_20,Sistemas de puertas,Door systems,Ss,OST_Doors,PENDIENTE VALIDAR POR CONSTRUCCIÓN
+Ss_25_30_95,Sistemas de ventanas,Window systems,Ss,OST_Windows,PENDIENTE VALIDAR POR CONSTRUCCIÓN

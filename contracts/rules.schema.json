@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://profesor-bim/contracts/rules.schema.json",
+  "title": "Reglas del BEP para el Agente Profesor BIM",
+  "description": "Las reglas se ejecutan en el plugin Revit. El backend solo las sirve (GET /rules) y usa rule_id para agrupar issues.",
+  "type": "object",
+  "required": ["version", "classification", "disciplines", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "description": "Versión semántica del set de reglas, p. ej. 0.1.0" },
+    "classification": {
+      "type": "object",
+      "required": ["parameter_name", "fallback_parameter_names", "table_file"],
+      "additionalProperties": false,
+      "properties": {
+        "parameter_name": { "type": "string", "description": "Parámetro principal con el código Uniclass" },
+        "fallback_parameter_names": { "type": "array", "items": { "type": "string" } },
+        "table_file": { "type": "string", "description": "Ruta relativa a la raíz del repo, p. ej. data/uniclass_subset.csv" }
+      }
+    },
+    "disciplines": {
+      "type": "object",
+      "description": "Disciplina → lista de BuiltInCategory. Un elemento pertenece a la disciplina de su categoría.",
+      "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/category" }, "minItems": 1 },
+      "propertyNames": { "enum": ["ARQ", "EST", "MEP"] }
+    },
+    "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rule" } }
+  },
+  "$defs": {
+    "category": {
+      "type": "string",
+      "pattern": "^OST_[A-Za-z]+$",
+      "description": "Nombre de Autodesk.Revit.DB.BuiltInCategory (independiente del idioma de Revit)"
+    },
+    "severity": { "enum": ["error", "warning", "info"] },
+    "rule": {
+      "type": "object",
+      "required": ["id", "name", "check", "severity", "scope", "params", "message", "explanation", "fix", "bep_ref", "enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^R\\d{2}$" },
+        "name": { "type": "string", "description": "Nombre corto en español" },
+        "check": {
+          "enum": [
+            "type_name_not_generic",
+            "type_name_pattern",
+            "classification_required",
+            "classification_exists",
+            "no_overlap",
+            "required_parameters",
+            "level_required",
+            "file_naming"
+          ],
+          "description": "Algoritmo que el plugin ejecuta. Cada valor tiene su forma de params (ver allOf)."
+        },
+        "severity": { "$ref": "#/$defs/severity" },
+        "scope": {
+          "type": "object",
+          "required": ["level"],
+          "additionalProperties": false,
+          "properties": {
+            "level": { "enum": ["element", "document"], "description": "element: se evalúa por elemento. document: una vez por archivo (element_guid = null)." },
+            "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } }
+          }
+        },
+        "params": { "type": "object" },
+        "message": {
+          "type": "string",
+          "description": "Mensaje corto para el panel. Placeholders permitidos: {type_name} {category} {code} {parameter} {other_guid} {file_name}"
+        },
+        "explanation": { "type": "string", "description": "Explicación base (sin IA). La IA puede reformularla pero no contradecirla." },
+        "fix": {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": ["none", "set_parameter", "rename_type", "join_geometry"],
+              "description": "Corrección en 1 clic que el plugin aplica en una Transaction vía ExternalEvent"
+            },
+            "parameter": { "type": "string", "description": "Para set_parameter" },
+            "value_source": {
+              "enum": ["user_input", "ai_suggestion", "pick_list"],
+              "description": "De dónde sale el valor. ai_suggestion usa POST /ai/suggest-classification"
+            },
+            "label": { "type": "string", "description": "Texto del botón" }
+          }
+        },
+        "bep_ref": { "type": "string", "description": "Sección de docs/BEP.md, p. ej. §3" },
+        "enabled": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "check": { "const": "type_name_not_generic" } } },
+          "then": { "properties": { "params": { "required": ["forbidden_patterns"], "properties": { "forbidden_patterns": { "type": "array", "items": { "type": "string" }, "description": "Regex .NET, sin distinguir mayúsculas" } } } } }
+        },
+        {
+          "if": { "properties": { "check": { "const": "type_name_pattern" } } },
+          "then": { "properties": { "params": { "required": ["patterns_by_category"], "properties": { "patterns_by_category": { "type": "object", "additionalProperties": { "type": "string" } } } } } }
+        },
+        {
+          "if": { "properties": { "check": { "const": "no_overlap" } } },
+          "then": { "properties": { "params": { "required": ["category_a", "category_b"], "properties": { "category_a": { "$ref": "#/$defs/category" }, "category_b": { "$ref": "#/$defs/category" }, "ignore_if_joined": { "type": "boolean" } } } } }
+        },
+        {
+          "if": { "properties": { "check": { "const": "required_parameters" } } },
+          "then": { "properties": { "params": { "required": ["parameters_by_category"], "properties": { "parameters_by_category": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } } } } } }
+        },
+        {
+          "if": { "properties": { "check": { "const": "file_naming" } } },
+          "then": { "properties": { "params": { "required": ["pattern"], "properties": { "pattern": { "type": "string" } } } } }
+        }
+      ]
+    }
+  }
+}

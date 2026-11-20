@@ -1,0 +1,712 @@
+openapi: 3.1.0
+info:
+  title: Agente Profesor BIM — API
+  version: 0.1.0
+  description: |
+    Contrato entre plugin Revit, backend, módulo IA y dashboard.
+    Convenciones:
+    - JSON en snake_case. Fechas ISO 8601 UTC. Moneda PEN, sin IGV. Unidades SI (m, m2, m3).
+    - `guid` = UniqueId de Revit (string estable entre sesiones).
+    - El plugin es la fuente de verdad de las validaciones: el backend NO re-ejecuta reglas, solo guarda y calcula.
+    - Todo número que la IA muestre viene en `facts` y fue calculado por SQL. La IA no inventa cifras.
+    - Errores: HTTP 4xx/5xx con cuerpo `Error`.
+servers:
+  - url: http://localhost:8000/api
+tags:
+  - name: sistema
+  - name: modelo
+  - name: issues
+  - name: feedback
+  - name: analisis
+  - name: ia
+  - name: exportes
+
+paths:
+  /health:
+    get:
+      tags: [sistema]
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, llm_mode]
+                properties:
+                  status: { type: string, const: ok }
+                  version: { type: string }
+                  llm_mode: { $ref: "#/components/schemas/LlmMode" }
+
+  /rules:
+    get:
+      tags: [sistema]
+      operationId: getRules
+      description: Devuelve data/rules.json tal cual (validado contra contracts/rules.schema.json).
+      responses:
+        "200":
+          description: Reglas vigentes
+          content:
+            application/json:
+              schema: { type: object }
+
+  /uniclass:
+    get:
+      tags: [sistema]
+      operationId: listUniclass
+      description: Tabla Uniclass del proyecto, opcionalmente filtrada por categoría Revit.
+      parameters:
+        - { name: category, in: query, schema: { type: string, example: OST_Walls } }
+      responses:
+        "200":
+          description: Códigos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UniclassCode" }
+
+  /snapshots:
+    post:
+      tags: [modelo]
+      operationId: createSnapshot
+      description: |
+        El plugin envía el estado completo del modelo en una versión: todos los elementos y todos los issues abiertos
+        en ese momento. Issues previos del mismo elemento+regla que ya no vengan se marcan `fixed` automáticamente.
+        Idempotente por (project_code, version_label): reenviar reemplaza el snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SnapshotCreate" }
+      responses:
+        "201":
+          description: Creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [modelo]
+      operationId: listSnapshots
+      parameters:
+        - { name: project_code, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Snapshots, más reciente primero
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Snapshot" }
+
+  /snapshots/{snapshot_id}:
+    get:
+      tags: [modelo]
+      operationId: getSnapshot
+      parameters: [{ $ref: "#/components/parameters/SnapshotId" }]
+      responses:
+        "200":
+          description: Snapshot con elementos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SnapshotDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /snapshots/{snapshot_id}/cde-state:
+    patch:
+      tags: [modelo]
+      operationId: setCdeState
+      description: Mueve el snapshot en el CDE. SHARED exige 0 issues `error` abiertos (409 si no).
+      parameters: [{ $ref: "#/components/parameters/SnapshotId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cde_state]
+              properties:
+                cde_state: { $ref: "#/components/schemas/CdeState" }
+      responses:
+        "200":
+          description: Actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /issues:
+    get:
+      tags: [issues]
+      operationId: listIssues
+      parameters:
+        - { $ref: "#/components/parameters/SnapshotIdQuery" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/IssueStatus" } }
+        - { name: discipline, in: query, schema: { $ref: "#/components/schemas/Discipline" } }
+        - { name: rule_id, in: query, schema: { type: string } }
+        - { name: element_guid, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Issue" }
+
+  /issues/{issue_id}:
+    patch:
+      tags: [issues]
+      operationId: updateIssue
+      description: El plugin avisa que corrigió (fixed) o el usuario descarta (dismissed) un issue.
+      parameters:
+        - { name: issue_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/IssueStatus" }
+                fixed_by: { type: string, enum: [one_click, manual] }
+      responses:
+        "200":
+          description: Actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Issue" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /elements/{guid}/thread:
+    get:
+      tags: [issues]
+      operationId: getElementThread
+      description: Historial de un elemento entre versiones (issues + feedback), orden cronológico.
+      parameters:
+        - { name: guid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Hilo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ElementThread" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /feedback:
+    post:
+      tags: [feedback]
+      operationId: createFeedback
+      description: Microencuesta "No pude, ¿por qué?" del panel del plugin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackCreate" }
+      responses:
+        "201":
+          description: Creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Feedback" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [feedback]
+      operationId: listFeedback
+      parameters:
+        - { name: rule_id, in: query, schema: { type: string } }
+        - { name: element_guid, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Feedback
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Feedback" }
+
+  /stats:
+    get:
+      tags: [analisis]
+      operationId: getStats
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Salud del modelo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stats" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /budget:
+    get:
+      tags: [analisis]
+      operationId: getBudget
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Presupuesto 5D
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Budget" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /budget/diff:
+    get:
+      tags: [analisis]
+      operationId: getBudgetDiff
+      parameters:
+        - { name: from_snapshot_id, in: query, required: true, schema: { type: integer } }
+        - { name: to_snapshot_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Diferencia de presupuesto entre versiones
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BudgetDiff" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/explain:
+    post:
+      tags: [ia]
+      operationId: explainIssue
+      description: Explicación didáctica de una regla. Caché por (rule_id, rules_version); el elemento solo personaliza el ejemplo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_id]
+              properties:
+                rule_id: { type: string }
+                element: { $ref: "#/components/schemas/Element" }
+      responses:
+        "200":
+          description: Explicación
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Explanation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/suggest-classification:
+    post:
+      tags: [ia]
+      operationId: suggestClassification
+      description: |
+        Filtra candidatos de la tabla Uniclass por categoría Revit; la IA elige SOLO entre ellos.
+        Si la respuesta del LLM no está en `candidates`, se devuelve `suggested_code: null`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [element]
+              properties:
+                element: { $ref: "#/components/schemas/Element" }
+      responses:
+        "200":
+          description: Sugerencia
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassificationSuggestion" }
+
+  /ai/recommendations:
+    get:
+      tags: [ia]
+      operationId: getRecommendations
+      description: Recomendaciones para el PM. El texto solo puede citar valores presentes en `facts`.
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Recomendaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Recommendation" }
+
+  /export/bcf:
+    get:
+      tags: [exportes]
+      operationId: exportBcf
+      description: BCF 2.1 (.bcfzip) con un topic por issue abierto.
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Archivo
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  /export/4d.csv:
+    get:
+      tags: [exportes]
+      operationId: export4d
+      description: "CSV 4D, una fila por elemento. Columnas: guid,category,type_name,level,uniclass_code,partida_codigo,quantity,unit,fase_sugerida"
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Archivo
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /export/cobie.xlsx:
+    get:
+      tags: [exportes]
+      operationId: exportCobie
+      description: COBie mínimo con hojas Contact, Facility, Floor, Type, Component.
+      parameters: [{ $ref: "#/components/parameters/SnapshotIdQuery" }]
+      responses:
+        "200":
+          description: Archivo
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+components:
+  parameters:
+    SnapshotId:
+      name: snapshot_id
+      in: path
+      required: true
+      schema: { type: integer }
+    SnapshotIdQuery:
+      name: snapshot_id
+      in: query
+      required: false
+      description: Si se omite, se usa el snapshot más reciente.
+      schema: { type: integer }
+
+  responses:
+    NotFound:
+      description: No existe
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflicto de estado
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Cuerpo inválido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+    LlmMode: { type: string, enum: [mock, openrouter, anthropic, ollama] }
+    CdeState: { type: string, enum: [WIP, SHARED, PUBLISHED, ARCHIVED] }
+    Discipline: { type: string, enum: [ARQ, EST, MEP] }
+    Severity: { type: string, enum: [error, warning, info] }
+    IssueStatus: { type: string, enum: [open, fixed, dismissed] }
+    Unit: { type: string, enum: [m3, m2, m, und, kg] }
+
+    UniclassCode:
+      type: object
+      required: [code, title_es, table, revit_categories]
+      properties:
+        code: { type: string, example: Ss_25_10_30 }
+        title_es: { type: string }
+        title_en: { type: string }
+        table: { type: string, example: Ss }
+        revit_categories:
+          type: array
+          items: { type: string }
+
+    Element:
+      type: object
+      description: Un elemento Revit en una versión. Magnitudes en SI; null si la categoría no la tiene.
+      required: [guid, category, discipline, type_name]
+      properties:
+        guid: { type: string, description: UniqueId de Revit }
+        element_id: { type: integer, description: ElementId (solo referencia, no estable) }
+        category: { type: string, example: OST_Walls }
+        discipline: { $ref: "#/components/schemas/Discipline" }
+        family_name: { type: string }
+        type_name: { type: string, example: MUR_CA_e25_FC210 }
+        classification_code: { type: [string, "null"], example: Ss_25_10_30 }
+        level: { type: [string, "null"], example: "Nivel 1" }
+        volume_m3: { type: [number, "null"], minimum: 0 }
+        area_m2: { type: [number, "null"], minimum: 0, description: "Muros/losas: área de cara. Puertas/ventanas: ancho × alto del vano" }
+        length_m: { type: [number, "null"], minimum: 0 }
+        parameters:
+          type: object
+          description: Parámetros LOIN leídos (nombre → valor como texto)
+          additionalProperties: { type: [string, "null"] }
+
+    IssueCreate:
+      type: object
+      required: [rule_id, severity, message]
+      properties:
+        element_guid: { type: [string, "null"], description: null para reglas de documento (R06) }
+        rule_id: { type: string, example: R02 }
+        severity: { $ref: "#/components/schemas/Severity" }
+        message: { type: string }
+        related_guid: { type: [string, "null"], description: Otro elemento implicado (R04) }
+
+    Issue:
+      allOf:
+        - $ref: "#/components/schemas/IssueCreate"
+        - type: object
+          required: [id, snapshot_id, status, discipline, first_seen_at]
+          properties:
+            id: { type: integer }
+            snapshot_id: { type: integer, description: Último snapshot donde se vio }
+            status: { $ref: "#/components/schemas/IssueStatus" }
+            discipline: { type: [string, "null"], enum: [ARQ, EST, MEP, null] }
+            first_seen_at: { type: string, format: date-time }
+            resolved_at: { type: [string, "null"], format: date-time }
+            fixed_by: { type: [string, "null"], enum: [one_click, manual, null] }
+
+    SnapshotCreate:
+      type: object
+      required: [project_code, file_name, version_label, cde_state, rules_version, elements, issues]
+      properties:
+        project_code: { type: string, example: HKT }
+        file_name: { type: string, example: HKT-EQP-ZZ-ZZ-M3-S-0001 }
+        version_label: { type: string, example: v3, description: "Lo define el usuario o el plugin (p. ej. fecha+hora)" }
+        cde_state: { $ref: "#/components/schemas/CdeState" }
+        rules_version: { type: string, example: 0.1.0 }
+        author: { type: string }
+        elements:
+          type: array
+          items: { $ref: "#/components/schemas/Element" }
+        issues:
+          type: array
+          items: { $ref: "#/components/schemas/IssueCreate" }
+
+    Snapshot:
+      type: object
+      required: [id, project_code, file_name, version_label, cde_state, rules_version, created_at, element_count, open_issue_count]
+      properties:
+        id: { type: integer }
+        project_code: { type: string }
+        file_name: { type: string }
+        version_label: { type: string }
+        cde_state: { $ref: "#/components/schemas/CdeState" }
+        rules_version: { type: string }
+        author: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        element_count: { type: integer }
+        open_issue_count: { type: integer }
+
+    SnapshotDetail:
+      allOf:
+        - $ref: "#/components/schemas/Snapshot"
+        - type: object
+          required: [elements]
+          properties:
+            elements:
+              type: array
+              items: { $ref: "#/components/schemas/Element" }
+
+    FeedbackReason:
+      type: string
+      enum: [no_entiendo_regla, no_encuentro_codigo, falta_informacion, regla_no_aplica, error_del_plugin, otro]
+
+    FeedbackCreate:
+      type: object
+      required: [element_guid, rule_id, reason]
+      properties:
+        element_guid: { type: string }
+        rule_id: { type: string }
+        issue_id: { type: [integer, "null"] }
+        reason: { $ref: "#/components/schemas/FeedbackReason" }
+        comment: { type: [string, "null"], maxLength: 500 }
+        author: { type: [string, "null"] }
+
+    Feedback:
+      allOf:
+        - $ref: "#/components/schemas/FeedbackCreate"
+        - type: object
+          required: [id, created_at]
+          properties:
+            id: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    ElementThread:
+      type: object
+      required: [guid, events]
+      properties:
+        guid: { type: string }
+        latest: { $ref: "#/components/schemas/Element" }
+        events:
+          type: array
+          items:
+            type: object
+            required: [at, kind, snapshot_id]
+            properties:
+              at: { type: string, format: date-time }
+              kind: { type: string, enum: [issue_opened, issue_fixed, issue_dismissed, feedback] }
+              snapshot_id: { type: [integer, "null"] }
+              issue: { $ref: "#/components/schemas/Issue" }
+              feedback: { $ref: "#/components/schemas/Feedback" }
+
+    DisciplineStats:
+      type: object
+      required: [discipline, element_count, conforming_count, conformance_pct, open_errors, open_warnings]
+      properties:
+        discipline: { $ref: "#/components/schemas/Discipline" }
+        element_count: { type: integer }
+        conforming_count: { type: integer, description: Elementos sin issues abiertos de severidad error ni warning }
+        conformance_pct: { type: number, minimum: 0, maximum: 100 }
+        open_errors: { type: integer }
+        open_warnings: { type: integer }
+
+    Stats:
+      type: object
+      required: [snapshot_id, cde_state, element_count, conformance_pct, by_discipline, by_rule, feedback_by_reason, snapshots_by_cde_state, fixed_one_click, fixed_manual]
+      properties:
+        snapshot_id: { type: integer }
+        cde_state: { $ref: "#/components/schemas/CdeState" }
+        element_count: { type: integer }
+        conformance_pct: { type: number }
+        can_move_to_shared: { type: boolean, description: true si 0 errores abiertos }
+        by_discipline:
+          type: array
+          items: { $ref: "#/components/schemas/DisciplineStats" }
+        by_rule:
+          type: array
+          items:
+            type: object
+            required: [rule_id, rule_name, open_count, fixed_count, feedback_count]
+            properties:
+              rule_id: { type: string }
+              rule_name: { type: string }
+              open_count: { type: integer }
+              fixed_count: { type: integer }
+              feedback_count: { type: integer }
+        feedback_by_reason:
+          type: object
+          additionalProperties: { type: integer }
+        snapshots_by_cde_state:
+          type: object
+          additionalProperties: { type: integer }
+        fixed_one_click: { type: integer }
+        fixed_manual: { type: integer }
+
+    BudgetLine:
+      type: object
+      required: [partida_codigo, descripcion, unidad, cantidad, precio_unitario, subtotal, element_count, uniclass_codes]
+      properties:
+        partida_codigo: { type: string, example: "02.03.04.01" }
+        descripcion: { type: string }
+        unidad: { $ref: "#/components/schemas/Unit" }
+        cantidad: { type: number }
+        precio_unitario: { type: number }
+        subtotal: { type: number, description: "round(cantidad × precio_unitario, 2)" }
+        element_count: { type: integer }
+        uniclass_codes:
+          type: array
+          items: { type: string }
+        pendiente_validar: { type: boolean, description: true si el precio está marcado PENDIENTE VALIDAR }
+
+    Budget:
+      type: object
+      required: [snapshot_id, cde_state, is_official, currency, total, lines, unbudgeted]
+      properties:
+        snapshot_id: { type: integer }
+        cde_state: { $ref: "#/components/schemas/CdeState" }
+        is_official: { type: boolean, description: true solo si cde_state = PUBLISHED }
+        currency: { type: string, const: PEN }
+        total: { type: number }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/BudgetLine" }
+        unbudgeted:
+          type: object
+          description: Elementos que no entraron al presupuesto
+          required: [element_count, guids_sample, by_reason]
+          properties:
+            element_count: { type: integer }
+            guids_sample:
+              type: array
+              maxItems: 20
+              items: { type: string }
+            by_reason:
+              type: object
+              description: "sin_codigo | codigo_invalido | sin_mapeo | sin_cantidad → conteo"
+              additionalProperties: { type: integer }
+        overlap_warnings:
+          type: integer
+          description: Issues R04 abiertos (volumen posiblemente duplicado)
+
+    BudgetDiffLine:
+      type: object
+      required: [partida_codigo, descripcion, unidad, cantidad_from, cantidad_to, subtotal_from, subtotal_to, delta_subtotal, change]
+      properties:
+        partida_codigo: { type: string }
+        descripcion: { type: string }
+        unidad: { $ref: "#/components/schemas/Unit" }
+        cantidad_from: { type: number }
+        cantidad_to: { type: number }
+        subtotal_from: { type: number }
+        subtotal_to: { type: number }
+        delta_subtotal: { type: number }
+        change: { type: string, enum: [added, removed, changed, unchanged] }
+
+    BudgetDiff:
+      type: object
+      required: [from_snapshot_id, to_snapshot_id, total_from, total_to, delta_total, lines, elements_added, elements_removed, elements_modified]
+      properties:
+        from_snapshot_id: { type: integer }
+        to_snapshot_id: { type: integer }
+        total_from: { type: number }
+        total_to: { type: number }
+        delta_total: { type: number }
+        delta_pct: { type: [number, "null"] }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/BudgetDiffLine" }
+        elements_added: { type: integer }
+        elements_removed: { type: integer }
+        elements_modified: { type: integer, description: Mismo guid con cambio en tipo, código o magnitudes }
+
+    Explanation:
+      type: object
+      required: [rule_id, text, cached, mode]
+      properties:
+        rule_id: { type: string }
+        text: { type: string }
+        cached: { type: boolean }
+        mode: { $ref: "#/components/schemas/LlmMode" }
+
+    ClassificationSuggestion:
+      type: object
+      required: [element_guid, candidates, suggested_code, mode]
+      properties:
+        element_guid: { type: string }
+        candidates:
+          type: array
+          description: Códigos válidos para la categoría, filtrados de la tabla
+          items: { $ref: "#/components/schemas/UniclassCode" }
+        suggested_code: { type: [string, "null"], description: Siempre uno de candidates o null }
+        reason: { type: [string, "null"] }
+        mode: { $ref: "#/components/schemas/LlmMode" }
+
+    Recommendation:
+      type: object
+      required: [id, title, text, priority, facts, mode]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        text: { type: string, description: Solo cita valores de facts }
+        priority: { type: string, enum: [alta, media, baja] }
+        facts:
+          type: object
+          description: Números calculados por SQL usados en el texto (nombre → valor)
+          additionalProperties: { type: [number, string] }
+        mode: { $ref: "#/components/schemas/LlmMode" }

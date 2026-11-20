@@ -1,0 +1,115 @@
+{
+  "version": "0.1.0",
+  "classification": {
+    "parameter_name": "Uniclass_Codigo",
+    "fallback_parameter_names": ["Classification.Uniclass.Ss.Number"],
+    "table_file": "data/uniclass_subset.csv"
+  },
+  "disciplines": {
+    "ARQ": ["OST_Walls", "OST_Floors", "OST_Doors", "OST_Windows"],
+    "EST": ["OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"]
+  },
+  "rules": [
+    {
+      "id": "R01",
+      "name": "Nombre de tipo genérico",
+      "check": "type_name_not_generic",
+      "severity": "error",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_Floors", "OST_Doors", "OST_Windows", "OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"] },
+      "params": {
+        "forbidden_patterns": ["gen[eé]ric", "default", "b[aá]sico", "^tipo\\s*\\d+$", "copia", "\\s\\d+$"]
+      },
+      "message": "El tipo \"{type_name}\" tiene un nombre genérico de plantilla.",
+      "explanation": "El BEP (§3) exige nombres CAT_MATERIAL_DIMENSION. Un nombre genérico impide saber qué es el elemento al metrar y asignar su partida: dos muros 'Genérico 200mm' pueden ser de concreto o de ladrillo con precios muy distintos.",
+      "fix": { "type": "rename_type", "value_source": "user_input", "label": "Renombrar tipo" },
+      "bep_ref": "§3",
+      "enabled": true
+    },
+    {
+      "id": "R02",
+      "name": "Elemento sin código Uniclass",
+      "check": "classification_required",
+      "severity": "error",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_Floors", "OST_Doors", "OST_Windows", "OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"] },
+      "params": {},
+      "message": "El elemento no tiene código Uniclass en \"{parameter}\".",
+      "explanation": "Sin código de clasificación el elemento no se puede asignar a una partida del presupuesto: queda fuera del 5D y el costo real se subestima (BEP §4).",
+      "fix": { "type": "set_parameter", "parameter": "Uniclass_Codigo", "value_source": "ai_suggestion", "label": "Asignar código sugerido" },
+      "bep_ref": "§4",
+      "enabled": true
+    },
+    {
+      "id": "R03",
+      "name": "Código Uniclass inexistente o de otra categoría",
+      "check": "classification_exists",
+      "severity": "error",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_Floors", "OST_Doors", "OST_Windows", "OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"] },
+      "params": {},
+      "message": "El código \"{code}\" no existe en la tabla Uniclass del proyecto o no corresponde a {category}.",
+      "explanation": "El código debe existir en data/uniclass_subset.csv y estar permitido para la categoría Revit del elemento (BEP §4). Un código mal escrito parece clasificado, pero el presupuesto no lo encuentra.",
+      "fix": { "type": "set_parameter", "parameter": "Uniclass_Codigo", "value_source": "pick_list", "label": "Elegir código válido" },
+      "bep_ref": "§4",
+      "enabled": true
+    },
+    {
+      "id": "R04",
+      "name": "Superposición muro–viga",
+      "check": "no_overlap",
+      "severity": "warning",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_StructuralFraming"] },
+      "params": { "category_a": "OST_Walls", "category_b": "OST_StructuralFraming", "ignore_if_joined": true },
+      "message": "El elemento se superpone con {other_guid} sin unión de geometría.",
+      "explanation": "Cuando un muro y una viga ocupan el mismo volumen sin unir geometría, el metrado cuenta ese concreto dos veces y el presupuesto sale inflado (BEP §6).",
+      "fix": { "type": "join_geometry", "label": "Unir geometría" },
+      "bep_ref": "§6",
+      "enabled": true
+    },
+    {
+      "id": "R05",
+      "name": "Parámetro LOIN faltante",
+      "check": "required_parameters",
+      "severity": "warning",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_Floors", "OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"] },
+      "params": {
+        "parameters_by_category": {
+          "OST_Walls": ["BIM_Material"],
+          "OST_Floors": ["BIM_Material"],
+          "OST_StructuralColumns": ["BIM_Material", "BIM_Resistencia_fc"],
+          "OST_StructuralFraming": ["BIM_Material", "BIM_Resistencia_fc"],
+          "OST_StructuralFoundation": ["BIM_Material", "BIM_Resistencia_fc"]
+        }
+      },
+      "message": "Falta el parámetro \"{parameter}\" exigido por el LOIN.",
+      "explanation": "El LOIN de diseño de detalle (BEP §5) pide material y resistencia para elegir el precio unitario correcto: un concreto f'c=280 no cuesta lo mismo que uno f'c=210.",
+      "fix": { "type": "set_parameter", "value_source": "user_input", "label": "Completar parámetro" },
+      "bep_ref": "§5",
+      "enabled": true
+    },
+    {
+      "id": "R06",
+      "name": "Nombre de archivo fuera de ISO 19650",
+      "check": "file_naming",
+      "severity": "warning",
+      "scope": { "level": "document" },
+      "params": { "pattern": "^[A-Z0-9]{2,6}-[A-Z0-9]{2,6}-[A-Z0-9]{2}-[A-Z0-9]{2}-M3-[A-Z]{1,2}-\\d{4}$" },
+      "message": "El archivo \"{file_name}\" no sigue el patrón Proyecto-Originador-Volumen-Nivel-Tipo-Rol-Número.",
+      "explanation": "El BEP (§2) usa la convención ISO 19650 para que cada modelo se identifique en el CDE sin abrirlo. Ejemplo válido: HKT-EQP-ZZ-ZZ-M3-S-0001.",
+      "fix": { "type": "none", "label": "Renombrar el archivo al guardar" },
+      "bep_ref": "§2",
+      "enabled": true
+    },
+    {
+      "id": "R07",
+      "name": "Elemento sin nivel",
+      "check": "level_required",
+      "severity": "warning",
+      "scope": { "level": "element", "categories": ["OST_Walls", "OST_Floors", "OST_StructuralColumns", "OST_StructuralFraming", "OST_StructuralFoundation"] },
+      "params": {},
+      "message": "El elemento no está asociado a un nivel.",
+      "explanation": "Sin nivel no se puede metrar por piso ni programar en el 4D (BEP §5).",
+      "fix": { "type": "none", "label": "Asignar nivel manualmente" },
+      "bep_ref": "§5",
+      "enabled": true
+    }
+  ]
+}
