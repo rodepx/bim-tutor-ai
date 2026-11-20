@@ -15,7 +15,9 @@ public sealed class UniclassTable
 
     public UniclassTable(IEnumerable<UniclassEntry> entries)
     {
-        _byCode = new Dictionary<string, UniclassEntry>(StringComparer.OrdinalIgnoreCase);
+        // Sensible a mayúsculas como el backend (services/budget.py): "ss_25_10_20" no existe en la tabla
+        // y debe dar R03 aquí, no pasar la validación y caer luego en "codigo_invalido" del 5D.
+        _byCode = new Dictionary<string, UniclassEntry>(StringComparer.Ordinal);
         foreach (var e in entries)
         {
             _byCode[e.Code] = e;

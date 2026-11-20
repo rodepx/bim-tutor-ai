@@ -85,6 +85,18 @@ def _element_example(element: dict | None) -> str:
     return f"\n\nEjemplo en tu modelo: el tipo «{type_name}»{ctx} está afectado por esta regla."
 
 
+def _explain_facts(rule: dict) -> dict:
+    """Textos de la regla cuyos números puede citar la explicación del LLM (guardia anti-cifras)."""
+    return {
+        "name": str(rule.get("name") or ""),
+        "explanation": str(rule.get("explanation") or ""),
+        "message": str(rule.get("message") or ""),
+        "bep_ref": str(rule.get("bep_ref") or ""),
+        "fix": _fix_label(rule),
+        "norma": "ISO 19650, Uniclass 2015",
+    }
+
+
 def explain_rule(rule: dict, element: dict | None = None) -> dict:
     rule_id = str(rule.get("id") or "")
     mode = llm.llm_mode()
@@ -101,7 +113,9 @@ def explain_rule(rule: dict, element: dict | None = None) -> dict:
                     "content": (
                         "Eres un profesor BIM que explica reglas del BEP a modeladores Revit. "
                         "Responde en español, tono didáctico, en 3 a 5 oraciones, texto plano sin listas ni markdown. "
-                        "No contradigas la explicación oficial de la regla ni inventes cifras."
+                        "No contradigas la explicación oficial de la regla. No escribas ningún número, cifra, "
+                        "porcentaje, resistencia (f'c), espesor ni precio que no aparezca literalmente en los datos "
+                        "de la regla que te doy."
                     ),
                 },
                 {
@@ -117,6 +131,8 @@ def explain_rule(rule: dict, element: dict | None = None) -> dict:
                 },
             ]
             text = llm.chat(messages, max_tokens=400)
+            if text is not None and not check_text(text, _explain_facts(rule))[0]:
+                text = None  # cifra no presente en la regla: se usa la explicación oficial
             if text is None:
                 mode = "mock"
         if text is None:
@@ -259,6 +275,11 @@ def _fmt_int(v) -> str:
     return f"{int(round(float(v))):,}"
 
 
+def _n(v, singular: str, plural: str) -> str:
+    """Cantidad + sustantivo concordado ("1 error", "3 errores")."""
+    return f"{_fmt_int(v)} {singular if int(round(float(v))) == 1 else plural}"
+
+
 def _fmt_money(v) -> str:
     return f"S/ {abs(float(v)):,.2f}"
 
@@ -301,17 +322,17 @@ def _deterministic(facts: dict) -> list[dict]:
     errors = _num(f.get("open_errors"))
     if errors and errors > 0:
         rf = _pick(f, "open_errors", "top_rule_id", "top_rule_name", "top_rule_open_count")
-        t = f"Hay {_fmt_int(errors)} errores abiertos en el modelo."
+        t = f"Hay {_n(errors, 'error abierto', 'errores abiertos')} en el modelo."
         if "top_rule_id" in rf and _num(f.get("top_rule_open_count")) is not None:
             name = f" ({rf['top_rule_name']})" if "top_rule_name" in rf else ""
             t += (f" La regla con más incidencias es {rf['top_rule_id']}{name}, con "
-                  f"{_fmt_int(f['top_rule_open_count'])} abiertas: corrígela primero.")
+                  f"{_n(f['top_rule_open_count'], 'abierta', 'abiertas')}: corrígela primero.")
         add("rec_errores", "Corregir los errores abiertos", "alta", rf, t)
 
     unb = _num(f.get("unbudgeted_count"))
     if unb and unb > 0:
         rf = _pick(f, "unbudgeted_count", "unbudgeted_sin_codigo")
-        t = f"{_fmt_int(unb)} elementos quedaron fuera del presupuesto 5D"
+        t = f"{_n(unb, 'elemento quedó', 'elementos quedaron')} fuera del presupuesto 5D"
         sc = _num(f.get("unbudgeted_sin_codigo"))
         t += f", de ellos {_fmt_int(sc)} sin código Uniclass." if sc else "."
         t += " Asigna su clasificación para que el costo no se subestime."
@@ -321,8 +342,9 @@ def _deterministic(facts: dict) -> list[dict]:
     if ov and ov > 0:
         rf = _pick(f, "overlap_warnings")
         add("rec_superposiciones", "Unir geometría muro–viga", "media", rf,
-            f"Se detectaron {_fmt_int(ov)} superposiciones muro–viga (R04) que duplican volumen de concreto "
-            "en el metrado. Une la geometría antes de compartir.")
+            f"{'Se detectó' if _fmt_int(ov) == '1' else 'Se detectaron'} "
+            f"{_n(ov, 'superposición muro–viga (R04) que duplica', 'superposiciones muro–viga (R04) que duplican')}"
+            " volumen de concreto en el metrado. Une la geometría antes de compartir.")
 
     dt, dp = _num(f.get("delta_total")), _num(f.get("delta_pct"))
     if (dt is not None and dt != 0) or (dp is not None and dp != 0):
@@ -342,7 +364,7 @@ def _deterministic(facts: dict) -> list[dict]:
     if isinstance(reason, str) and reason.strip():
         rf = _pick(f, "feedback_top_reason", "feedback_top_count")
         cnt = _num(f.get("feedback_top_count"))
-        extra = f" ({_fmt_int(cnt)} veces)" if cnt else ""
+        extra = f" ({_n(cnt, 'vez', 'veces')})" if cnt else ""
         add("rec_feedback", "Atender el feedback del equipo", "baja", rf,
             f"El motivo más reportado por los modeladores es «{reason.strip()}»{extra}. "
             "Revisa si la regla necesita ajuste o una capacitación breve.")
@@ -357,7 +379,7 @@ def _deterministic(facts: dict) -> list[dict]:
     elif state == "WIP" and can is False:
         rf = _pick(f, "cde_state", "open_errors")
         t = "El modelo sigue en WIP y aún no puede pasar a SHARED"
-        t += f": primero hay que cerrar {_fmt_int(errors)} errores." if errors else "."
+        t += f": primero hay que cerrar {_n(errors, 'error', 'errores')}." if errors else "."
         add("rec_cde", "Desbloquear el paso a SHARED", "alta" if errors else "media", rf, t)
 
     conf = _num(f.get("conformance_pct"))

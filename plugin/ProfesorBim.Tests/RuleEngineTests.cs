@@ -150,6 +150,15 @@ public class RuleEngineTests
     }
 
     [Fact]
+    public void Classification_exists_is_case_sensitive_like_backend()
+    {
+        var engine = CreateEngine();
+        var issue = Assert.Single(Run(engine, Valid(code: "ss_25_10_20")));
+        Assert.Equal("R03", issue.RuleId);
+        Assert.Empty(Run(engine, Valid(code: " Ss_25_10_20 ")));
+    }
+
+    [Fact]
     public void Classification_exists_flags_code_of_other_category()
     {
         var engine = CreateEngine();

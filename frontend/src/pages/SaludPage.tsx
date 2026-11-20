@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { CdeState } from "../api/types";
 import { Card, CdeBadge, ErrorBox, HBars, Loading, Meter, Pill, Stat, errorMessage } from "../components/ui";
 import { conformanceTone, formatInt, formatPct } from "../format";
-import { CDE_LABELS, CDE_ORDER, DISCIPLINE_LABELS, RULE_NAMES, feedbackReasonLabel } from "../rules";
+import { CDE_LABELS, CDE_ORDER, DISCIPLINE_LABELS, RULE_NAMES, feedbackReasonLabel, openBySeverity } from "../rules";
 import { useApi, useApp } from "../state";
 
 const NEXT_STATE: Partial<Record<CdeState, CdeState>> = { WIP: "SHARED", SHARED: "PUBLISHED", PUBLISHED: "ARCHIVED" };
@@ -14,8 +14,7 @@ export default function SaludPage() {
   if (stats.loading && !stats.data) return <Loading />;
   if (stats.error) return <ErrorBox error={stats.error} onRetry={stats.reload} />;
   const s = stats.data!;
-  const openErrors = s.by_discipline.reduce((a, d) => a + d.open_errors, 0);
-  const openWarnings = s.by_discipline.reduce((a, d) => a + d.open_warnings, 0);
+  const { errors: openErrors, warnings: openWarnings } = openBySeverity(s.by_rule);
   const totalFixed = s.fixed_one_click + s.fixed_manual;
   const tone = conformanceTone(s.conformance_pct);
   const feedback = Object.entries(s.feedback_by_reason).sort((a, b) => b[1] - a[1]);

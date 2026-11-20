@@ -73,7 +73,7 @@ function BudgetView() {
         </div>
         {(b.overlap_warnings ?? 0) > 0 && (
           <div className="alert alert-warn">
-            ⚠ {b.overlap_warnings} superposiciones muro–viga abiertas (R04): parte del volumen de concreto podría estar contado dos veces.
+            ⚠ {b.overlap_warnings} {b.overlap_warnings === 1 ? "superposición muro–viga abierta" : "superposiciones muro–viga abiertas"} (R04): parte del volumen de concreto podría estar contado dos veces.
           </div>
         )}
       </Card>

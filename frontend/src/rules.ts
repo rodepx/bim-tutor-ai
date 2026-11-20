@@ -1,16 +1,30 @@
-// Nombres y etiquetas en español. Nombres de regla copiados de data/rules.json (v0.1.0);
-// cuando hay backend, la UI prefiere el rule_name que llega en /stats.
-import type { CdeState, FeedbackReason } from "./api/types";
+// Nombres y etiquetas en español. Nombre y severidad de cada regla se leen de data/rules.json
+// (misma fuente que el plugin); cuando hay backend, la UI prefiere el rule_name que llega en /stats.
+import type { CdeState, FeedbackReason, RuleStats, Severity } from "./api/types";
+import rulesData from "../../data/rules.json";
 
-export const RULE_NAMES: Record<string, string> = {
-  R01: "Nombre de tipo genérico",
-  R02: "Elemento sin código Uniclass",
-  R03: "Código Uniclass inexistente o de otra categoría",
-  R04: "Superposición muro–viga",
-  R05: "Parámetro LOIN faltante",
-  R06: "Nombre de archivo fuera de ISO 19650",
-  R07: "Elemento sin nivel",
-};
+const RULES: { id: string; name: string; severity: string }[] = rulesData.rules;
+
+export const RULE_NAMES: Record<string, string> = Object.fromEntries(RULES.map((r) => [r.id, r.name]));
+
+export const RULE_SEVERITY: Record<string, Severity> = Object.fromEntries(
+  RULES.map((r) => [r.id, r.severity as Severity]),
+);
+
+/**
+ * Errores y advertencias abiertos del snapshot a partir de by_rule (incluye reglas de documento
+ * como R06, que no tienen disciplina y por eso no suman en by_discipline).
+ */
+export function openBySeverity(byRule: RuleStats[]): { errors: number; warnings: number } {
+  let errors = 0;
+  let warnings = 0;
+  for (const r of byRule) {
+    const sev = RULE_SEVERITY[r.rule_id];
+    if (sev === "error") errors += r.open_count;
+    else if (sev === "warning") warnings += r.open_count;
+  }
+  return { errors, warnings };
+}
 
 export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
   no_entiendo_regla: "No entiendo la regla",

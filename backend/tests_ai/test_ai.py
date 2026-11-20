@@ -198,3 +198,56 @@ def test_recommendations_shape_and_templates_pass_guard(monkeypatch):
             assert all(isinstance(v, (int, float, str)) and not isinstance(v, bool) for v in r["facts"].values())
             ok, bad = check_text(r["text"], r["facts"])
             assert ok, (r, bad)
+
+
+# ------------------------------------------------------------------ guard (revisión: casos adversarios)
+@pytest.mark.parametrize("text,bad", [
+    ("Hay diez errores abiertos.", ["diez"]),
+    ("Faltan quince días y doscientos elementos.", ["quince", "doscientos"]),
+    ("Se perderán 58elementos del metrado.", ["58"]),
+    ("Valor 12xyz inventado.", ["12"]),
+    ("Entre 10-20 errores.", ["10", "20"]),
+    ("Entrega el 2026-11-19.", ["2026", "11", "19"]),
+    ("Costará S/ 1.2 mil.", ["1.2", "mil"]),
+    ("Concreto f'c=280 kg/cm2.", ["280"]),
+])
+def test_guard_rejects_adversarial_numbers(text, bad):
+    ok, found = check_text(text, {"open_errors": 14, "budget_total": 1200})
+    assert not ok and found == bad
+
+
+@pytest.mark.parametrize("text", [
+    "Regla R04, tipo MUR_CA_e25_FC210, código Ss_20_10_10, presupuesto 5D y 4D.",
+    "Hay catorce errores (14) y la conformidad es 72.5 por ciento.",
+    "Hay -14 errores en 120m2 de muro.",
+])
+def test_guard_still_skips_identifiers_and_accepts_facts(text):
+    ok, bad = check_text(text, {"open_errors": 14, "conformance_pct": 72.5, "area": 120})
+    assert ok, bad
+
+
+def test_explain_rejects_llm_text_with_invented_number(fake_llm):
+    r05 = next(r for r in RULES if r["id"] == "R05")
+    fake_llm.answers = ["Usa un concreto f'c=350 para las columnas (BEP §5)."]
+    res = ai.explain_rule(r05, None)
+    assert res["mode"] == "mock" and "350" not in res["text"]
+    assert res["text"].startswith(r05["explanation"])
+
+
+def test_explain_accepts_numbers_from_rule(fake_llm):
+    r05 = next(r for r in RULES if r["id"] == "R05")
+    fake_llm.answers = ["Según el BEP §5, f'c=280 y f'c=210 tienen precios distintos (ISO 19650)."]
+    res = ai.explain_rule(r05, None)
+    assert res["mode"] == "openrouter" and "280" in res["text"]
+
+
+def test_recommendation_texts_singular(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    facts = {"open_errors": 1, "top_rule_id": "R02", "top_rule_open_count": 1, "unbudgeted_count": 1,
+             "overlap_warnings": 1, "feedback_top_reason": "otro", "feedback_top_count": 1,
+             "cde_state": "WIP", "can_move_to_shared": False}
+    text = " ".join(r["text"] for r in ai.build_recommendations(facts))
+    assert "Se detectó 1 superposición muro–viga (R04) que duplica volumen" in text
+    assert "Hay 1 error abierto" in text and "1 elemento quedó" in text
+    for wrong in ("1 superposiciones", "1 errores", "1 elementos", "1 veces", "1 abiertas"):
+        assert wrong not in text

@@ -4,17 +4,43 @@ from __future__ import annotations
 import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable
+import unicodedata
 
 # Número con separadores de miles (coma, punto, espacio, nbsp) y decimales opcionales.
-# No debe ir pegado a letras/dígitos: así se ignoran identificadores como R04, FC210,
-# e25, m3 o 5D (los ids de regla quedan permitidos por construcción).
+# No debe ir precedido de letra/dígito/_: así se ignoran identificadores como R04, FC210,
+# e25, m3 o Ss_20_10_10 (los ids de regla quedan permitidos por construcción).
+# Si va seguido de letras SÍ cuenta ("58elementos", "12xyz"), salvo una sola mayúscula
+# (5D, 4D, 3D: nombres de dimensión BIM, ver _IDENT_SUFFIX_RE).
 _NUM_RE = re.compile(
-    r"(?<![A-Za-z0-9_])"
+    r"(?<!\w)"
     r"(\d{1,3}(?:[,.   ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
-    r"(?![A-Za-z0-9_])"
+    r"(?![0-9_])"
 )
+_IDENT_SUFFIX_RE = re.compile(r"[A-Z](?![^\W\d_])")
 # Unidades pegadas al número ("120m2", "35kg") se separan para no ocultar el número.
 _UNIT_RE = re.compile(r"(\d)(m2|m3|m²|m³|kg|ml|und)(?![A-Za-z0-9])", re.I)
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).lower()
+
+
+# Números escritos con palabras (es). Se excluyen "un/uno/una" (artículos) y ordinales.
+_UNITS = ["cero", "", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+          "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve", "veinte"]
+_WORD_VALUES: dict[str, float] = {w: float(i) for i, w in enumerate(_UNITS) if w}
+_WORD_VALUES.update({"veinti" + w: 20.0 + i for i, w in enumerate(_UNITS[:10]) if w and i > 1})
+_WORD_VALUES.update({"veintiuno": 21.0, "veintiun": 21.0, "veintiuna": 21.0})
+for _i, _w in enumerate(["treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"], start=3):
+    _WORD_VALUES[_w] = _i * 10.0
+for _i, _w in enumerate(["doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos",
+                         "setecientos", "ochocientos", "novecientos"], start=2):
+    _WORD_VALUES[_w] = _i * 100.0
+    _WORD_VALUES[_w[:-2] + "as"] = _i * 100.0  # doscientas…
+_WORD_VALUES.update({"cien": 100.0, "ciento": 100.0, "mil": 1000.0, "millon": 1e6, "millones": 1e6,
+                     "docena": 12.0, "docenas": 12.0, "decena": 10.0, "decenas": 10.0, "centenar": 100.0,
+                     "centenares": 100.0, "miles": 1000.0})
+_WORD_RE = re.compile(r"[^\W\d_]+")
 
 
 def _interpretations(token: str) -> set[float]:
@@ -44,8 +70,25 @@ def _interpretations(token: str) -> set[float]:
 
 
 def extract_numbers(text: str) -> list[tuple[str, set[float]]]:
+    """Números en cifras (y, si ``words``, también escritos con palabras: "diez", "mil")."""
+    return _extract(text, words=True)
+
+
+def _extract(text: str, words: bool) -> list[tuple[str, set[float]]]:
     text = _UNIT_RE.sub(lambda m: f"{m.group(1)} {m.group(2)}", text or "")
-    return [(m.group(1), _interpretations(m.group(1))) for m in _NUM_RE.finditer(text)]
+    found: list[tuple[int, str, set[float]]] = []
+    for m in _NUM_RE.finditer(text):
+        if _IDENT_SUFFIX_RE.match(text, m.end()):
+            continue  # 5D, 4D, 3D
+        found.append((m.start(), m.group(1), _interpretations(m.group(1))))
+    if words:
+        # "por ciento" no es la cifra 100: el número que lo precede ya se valida.
+        for m in _WORD_RE.finditer(re.sub(r"(?i)\bpor\s+ciento\b", lambda x: " " * len(x.group(0)), text)):
+            v = _WORD_VALUES.get(_strip_accents(m.group(0)))
+            if v is not None:
+                found.append((m.start(), m.group(0), {v}))
+    found.sort(key=lambda t: t[0])
+    return [(tok, vals) for _, tok, vals in found]
 
 
 def allowed_values(facts: dict) -> set[float]:
@@ -55,8 +98,8 @@ def allowed_values(facts: dict) -> set[float]:
             continue
         if isinstance(v, (int, float)):
             vals.add(abs(float(v)))
-        elif isinstance(v, str):  # números contenidos en hechos de texto
-            for _, interp in extract_numbers(v):
+        elif isinstance(v, str):  # números en cifras contenidos en hechos de texto
+            for _, interp in _extract(v, words=False):
                 vals.update(interp)
     return vals
 
