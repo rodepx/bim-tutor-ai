@@ -68,7 +68,11 @@ Etapa: diseño de detalle (equivalente LOD 300). Parámetros obligatorios por ca
 | Cimentación estructural | `Uniclass_Codigo`, `BIM_Material`, `BIM_Resistencia_fc` |
 | Puertas / Ventanas | `Uniclass_Codigo` |
 
+`Uniclass_Codigo` se verifica con R02/R03; `BIM_Material` y `BIM_Resistencia_fc` con R05.
+`BIM_Resistencia_fc` se registra en kg/cm² como texto numérico (p. ej. `210`).
+
 Geometría: todo elemento asociado a un **nivel** (necesario para 4D y metrados por piso).
+Puertas y ventanas toman el nivel de su muro anfitrión, por eso R07 no las revisa.
 
 ## 6. Coordinación (§6)
 
@@ -91,7 +95,9 @@ los de WIP/SHARED son estimados.
 ## 8. Presupuesto 5D (§8)
 
 - Moneda: PEN (S/), precios sin IGV.
-- Partidas según Norma Técnica de Metrados (RNE) — mapeo en `data/mapeo_partidas.csv`.
+- Partidas según la Norma Técnica "Metrados para Obras de Edificación y Habilitaciones Urbanas" (MVCS), con
+  mapeo en `data/mapeo_partidas.csv`. La numeración `OE.x.x.x.x` es de ejemplo y está pendiente de validación
+  (ver `demo/VALIDAR_CONSTRUCCION.md`).
 - Cantidad = magnitud del elemento (`volume_m3`, `area_m2`, `length_m` o `count` = 1 por elemento) × `factor` de la partida.
   El factor permite derivar acero (kg/m3) y encofrado (m2/m3) del volumen; son ratios de ejemplo a validar.
 - Un código Uniclass puede generar varias partidas (concreto + encofrado + acero).
