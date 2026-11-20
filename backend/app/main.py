@@ -35,11 +35,37 @@ app.add_middleware(
 )
 
 
+def _msg_es(e: dict) -> str:
+    """Mensaje en español para un error de validación de pydantic."""
+    t, ctx = e.get("type", ""), e.get("ctx") or {}
+    if t == "missing":
+        return "campo obligatorio"
+    if t in ("literal_error", "enum"):
+        return f"valor no permitido (opciones: {str(ctx.get('expected', '')).replace(' or ', ' o ')})"
+    if t.startswith("int_"):
+        return "debe ser un número entero"
+    if t.startswith("float_"):
+        return "debe ser un número"
+    if t.startswith("bool_"):
+        return "debe ser verdadero o falso"
+    if t == "string_type":
+        return "debe ser texto"
+    if t == "string_too_long":
+        return f"texto demasiado largo (máximo {ctx.get('max_length')} caracteres)"
+    if t in ("greater_than_equal", "greater_than"):
+        return f"debe ser mayor{' o igual' if t.endswith('equal') else ''} que {ctx.get('ge', ctx.get('gt'))}"
+    if t in ("list_type", "dict_type", "model_type", "model_attributes_type"):
+        return "tipo de dato inválido"
+    if t == "json_invalid":
+        return "JSON mal formado"
+    return "valor inválido"
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_handler(_: Request, exc: RequestValidationError):
-    """Cuerpo `Error` del contrato (detail string) + lista original en `errors`."""
+    """Cuerpo `Error` del contrato (detail string en español) + lista original en `errors`."""
     errs = exc.errors()
-    detail = "; ".join(f"{'.'.join(str(p) for p in e.get('loc', []))}: {e.get('msg')}" for e in errs)
+    detail = "; ".join(f"{'.'.join(str(p) for p in e.get('loc', []))}: {_msg_es(e)}" for e in errs)
     return JSONResponse(status_code=422, content={"detail": detail or "Cuerpo inválido",
                                                   "errors": jsonable_encoder(errs, custom_encoder={Exception: str})})
 

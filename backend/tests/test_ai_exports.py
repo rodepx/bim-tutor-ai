@@ -7,7 +7,7 @@ from openpyxl import load_workbook
 
 from app.services.exports import ifc_guid_from_unique_id
 from app.services.stats import compute_facts
-from conftest import el, snapshot_body
+from bim_test_helpers import el, snapshot_body
 
 FACT_KEYS = {
     "conformance_pct", "open_errors", "open_warnings", "top_rule_id", "top_rule_name", "top_rule_open_count",

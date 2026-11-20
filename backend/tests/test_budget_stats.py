@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import ELEMENTS_V1, el, snapshot_body
+from bim_test_helpers import ELEMENTS_V1, el, snapshot_body
 
 
 def lines_by_code(budget):

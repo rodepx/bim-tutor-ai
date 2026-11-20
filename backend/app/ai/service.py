@@ -264,7 +264,8 @@ def _fmt_money(v) -> str:
 
 
 def _fmt_pct(v) -> str:
-    return f"{abs(float(v)):.1f}%"
+    # Hasta 2 decimales, sin ceros sobrantes: el texto cita el mismo valor que `facts` (p. ej. 16.36%, 71.4%).
+    return f"{abs(float(v)):.2f}".rstrip("0").rstrip(".") + "%"
 
 
 def _num(v) -> float | None:
