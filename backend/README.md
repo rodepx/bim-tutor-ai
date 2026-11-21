@@ -60,7 +60,7 @@ app/
 - Cada snapshot guarda qué issues tenía y su estado *dentro de ese snapshot* (tabla `snapshot_issues`).
   Los conteos "abiertos en el snapshot X" (stats, gate CDE, `open_issue_count`, presupuesto, BCF) usan ese estado,
   así un snapshot viejo conserva su foto. Un PATCH actualiza el estado en el último snapshot del issue.
-  `GET /issues?snapshot_id=X` lista los issues presentes en X con su estado actual.
+  `GET /issues?snapshot_id=X` lista los issues presentes en X con su estado dentro de X (contrato 0.2.0); `fixed_by` y `resolved_at` siguen siendo la historia global del issue.
 - **PATCH /snapshots/{id}/cde-state**: `SHARED` y `PUBLISHED` → 409 si hay issues `error` abiertos en ese snapshot.
 - **Conformidad**: elemento conforme = sin issues abiertos de severidad `error` ni `warning`. Elementos deduplicados por guid.
 - **Presupuesto** (`services/budget.py`, BEP §8): cada guid una vez; motivos `sin_codigo`, `codigo_invalido`

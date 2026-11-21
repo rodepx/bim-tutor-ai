@@ -89,7 +89,8 @@ public sealed class Snapshot
 
 public sealed class FeedbackCreate
 {
-    public string ElementGuid { get; set; } = "";
+    /// <summary>null para reglas de documento (R06), contrato 0.2.0.</summary>
+    public string? ElementGuid { get; set; }
     public string RuleId { get; set; } = "";
     public int? IssueId { get; set; }
     public string Reason { get; set; } = FeedbackReasons.Otro;

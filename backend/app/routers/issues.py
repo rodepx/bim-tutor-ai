@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.db import get_db
-from app.services.common import element_dict, resolve_snapshot, snapshot_issues
+from app.services.common import element_dict, resolve_snapshot
 from app.services.snapshots import update_issue as do_update_issue
 
 router = APIRouter(tags=["issues"])
@@ -22,10 +22,17 @@ def list_issues(
     db: Session = Depends(get_db),
 ):
     snap = resolve_snapshot(db, snapshot_id)
-    issues = snapshot_issues(db, snap.id, status=None)
+    rows = db.execute(
+        select(models.Issue, models.SnapshotIssue.status)
+        .join(models.SnapshotIssue, models.SnapshotIssue.issue_id == models.Issue.id)
+        .where(models.SnapshotIssue.snapshot_id == snap.id)
+        .order_by(models.Issue.id)
+    ).all()
+    # El estado que se filtra y devuelve es el del issue dentro de este snapshot (contrato 0.2.0).
     return [
-        i for i in issues
-        if (status is None or i.status == status)
+        schemas.Issue.model_validate(i).model_copy(update={"status": st})
+        for i, st in rows
+        if (status is None or st == status)
         and (discipline is None or i.discipline == discipline)
         and (rule_id is None or i.rule_id == rule_id)
         and (element_guid is None or i.element_guid == element_guid)

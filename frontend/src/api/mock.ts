@@ -321,6 +321,8 @@ function computeStats(s: Snapshot): Stats {
     snapshots_by_cde_state,
     fixed_one_click: issues.filter((i) => i.fixed_by === "one_click").length,
     fixed_manual: issues.filter((i) => i.fixed_by === "manual").length,
+    open_errors: open.filter((i) => i.severity === "error").length,
+    open_warnings: open.filter((i) => i.severity === "warning").length,
   };
 }
 

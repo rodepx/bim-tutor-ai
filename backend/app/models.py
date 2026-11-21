@@ -101,7 +101,7 @@ class Feedback(Base):
     __tablename__ = "feedback"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    element_guid: Mapped[str] = mapped_column(String(64), index=True)
+    element_guid: Mapped[str | None] = mapped_column(String(64), index=True)
     rule_id: Mapped[str] = mapped_column(String(16), index=True)
     issue_id: Mapped[int | None] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(32))

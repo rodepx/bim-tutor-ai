@@ -69,7 +69,8 @@ def test_issue_lifecycle(client):
 
     v1_list = {(i["element_guid"], i["rule_id"]): i for i in client.get("/api/issues", params={"snapshot_id": s1["id"]}).json()}
     r04 = v1_list[("W1", "R04")]
-    assert r04["status"] == "fixed" and r04["fixed_by"] == "manual" and r04["resolved_at"]
+    # status = estado dentro de v1 (abierto); fixed_by/resolved_at son la historia global del issue
+    assert r04["status"] == "open" and r04["fixed_by"] == "manual" and r04["resolved_at"]
     assert v1_list[("C1", "R05")]["fixed_by"] == "one_click"  # no se pisa
 
     # filtros
@@ -86,7 +87,9 @@ def test_issue_lifecycle(client):
 def test_regression_reopens_issue(client):
     client.post("/api/snapshots", json=snapshot_body("v1"))
     client.post("/api/snapshots", json=snapshot_body("v2", issues=[]))
-    assert all(i["status"] == "fixed" for i in client.get("/api/issues", params={"snapshot_id": 1}).json())
+    v1 = client.get("/api/issues", params={"snapshot_id": 1}).json()
+    assert v1 and all(i["status"] == "open" and i["resolved_at"] for i in v1)
+    assert client.get("/api/issues", params={"snapshot_id": 2}).json() == []
     client.post("/api/snapshots", json=snapshot_body("v3"))
     issues = client.get("/api/issues").json()
     assert len(issues) == 5 and all(i["status"] == "open" and i["fixed_by"] is None for i in issues)
@@ -149,7 +152,19 @@ def test_r05_one_issue_per_parameter(client):
     # v2: el modelador completó BIM_Material; sigue faltando BIM_Resistencia_fc
     client.post("/api/snapshots", json=snapshot_body("v2", issues=[r05("BIM_Resistencia_fc")]))
     by_msg = {i["message"]: i for i in client.get("/api/issues", params={"snapshot_id": 1}).json()}
-    assert by_msg[r05("BIM_Material")["message"]]["status"] == "fixed"
+    assert by_msg[r05("BIM_Material")["message"]]["resolved_at"]
+    v2 = client.get("/api/issues", params={"snapshot_id": 2}).json()
+    assert [i["message"] for i in v2] == [r05("BIM_Resistencia_fc")["message"]]
     still = by_msg[r05("BIM_Resistencia_fc")["message"]]
     assert still["status"] == "open" and still["snapshot_id"] == 2
     assert client.get("/api/snapshots/2").json()["open_issue_count"] == 1
+
+
+def test_contract_020_doc_feedback_and_stats_totals(client):
+    client.post("/api/snapshots", json=snapshot_body("v1"))
+    r = client.post("/api/feedback", json={"element_guid": None, "rule_id": "R06", "reason": "regla_no_aplica"})
+    assert r.status_code == 201 and r.json()["element_guid"] is None
+    st = client.get("/api/stats").json()
+    # 2 errores + 3 warnings; el R06 de documento (sin disciplina) cuenta en el total
+    assert (st["open_errors"], st["open_warnings"]) == (2, 3)
+    assert sum(d["open_warnings"] for d in st["by_discipline"]) == 2

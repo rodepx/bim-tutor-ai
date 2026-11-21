@@ -80,6 +80,8 @@ def compute_stats(db: Session, snap: models.Snapshot) -> dict:
         "snapshots_by_cde_state": snapshots_by_cde_state,
         "fixed_one_click": sum(1 for i in fixed if i.fixed_by == "one_click"),
         "fixed_manual": sum(1 for i in fixed if i.fixed_by == "manual"),
+        "open_errors": open_errors,
+        "open_warnings": sum(1 for i in open_issues if i.severity == "warning"),
     }
 
 

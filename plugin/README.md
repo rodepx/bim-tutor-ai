@@ -131,4 +131,4 @@ Guarda el archivo como `Prueba.rvt`. Backend levantado en `http://localhost:8000
 
 - La validación en vivo se pausa si se cambia de documento: al activar otro documento se revalida completo.
 - R06 se reevalúa en *Guardar como*; un archivo nuevo sin guardar se valida con su título («Proyecto1»).
-- Para reglas de documento (R06) la microencuesta envía `element_guid = "DOC:<archivo>"` porque el contrato lo exige.
+- Para reglas de documento (R06) la microencuesta envía `element_guid: null` (contrato 0.2.0).

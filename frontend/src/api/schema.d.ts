@@ -104,7 +104,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Mueve el snapshot en el CDE. SHARED exige 0 issues `error` abiertos (409 si no). */
+        /** @description Mueve el snapshot en el CDE. SHARED y PUBLISHED exigen 0 issues `error` abiertos en ese snapshot (409 si no). */
         patch: operations["setCdeState"];
         trace?: never;
     };
@@ -115,6 +115,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Con snapshot_id (o el más reciente si se omite) lista los issues presentes en ese snapshot.
+         *     `status` (filtro y respuesta) es el estado del issue DENTRO de ese snapshot, no el estado global actual.
+         */
         get: operations["listIssues"];
         put?: never;
         post?: never;
@@ -365,7 +369,7 @@ export interface components {
             /** @example OST_Walls */
             category: string;
             discipline: components["schemas"]["Discipline"];
-            family_name?: string;
+            family_name?: string | null;
             /** @example MUR_CA_e25_FC210 */
             type_name: string;
             /** @example Ss_25_10_30 */
@@ -418,7 +422,7 @@ export interface components {
             cde_state: components["schemas"]["CdeState"];
             /** @example 0.1.0 */
             rules_version: string;
-            author?: string;
+            author?: string | null;
             elements: components["schemas"]["Element"][];
             issues: components["schemas"]["IssueCreate"][];
         };
@@ -441,7 +445,8 @@ export interface components {
         /** @enum {string} */
         FeedbackReason: "no_entiendo_regla" | "no_encuentro_codigo" | "falta_informacion" | "regla_no_aplica" | "error_del_plugin" | "otro";
         FeedbackCreate: {
-            element_guid: string;
+            /** @description null para reglas de documento (R06) */
+            element_guid: string | null;
             rule_id: string;
             issue_id?: number | null;
             reason: components["schemas"]["FeedbackReason"];
@@ -482,6 +487,10 @@ export interface components {
             conformance_pct: number;
             /** @description true si 0 errores abiertos */
             can_move_to_shared?: boolean;
+            /** @description Issues error abiertos en el snapshot */
+            open_errors: number;
+            /** @description Issues warning abiertos en el snapshot */
+            open_warnings: number;
             by_discipline: components["schemas"]["DisciplineStats"][];
             by_rule: {
                 rule_id: string;

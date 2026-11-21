@@ -85,6 +85,9 @@ public class ContractTests
         var json = JsonSerializer.Serialize(new FeedbackCreate { ElementGuid = "g", RuleId = "R01", Reason = "otro" }, ProfesorBimJsonContext.Default.FeedbackCreate);
         Assert.Contains("\"element_guid\":\"g\"", json);
         Assert.Contains("\"issue_id\":null", json);
+        // Regla de documento (R06): element_guid se envía como null explícito (campo requerido, contrato 0.2.0)
+        var doc = JsonSerializer.Serialize(new FeedbackCreate { RuleId = "R06" }, ProfesorBimJsonContext.Default.FeedbackCreate);
+        Assert.Contains("\"element_guid\":null", doc);
     }
 
     [Fact]

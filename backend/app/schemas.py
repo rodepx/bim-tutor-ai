@@ -122,7 +122,7 @@ class CdeStateUpdate(_Base):
 
 
 class FeedbackCreate(_Base):
-    element_guid: str
+    element_guid: str | None  # null = regla de documento (R06)
     rule_id: str
     issue_id: int | None = None
     reason: FeedbackReason
@@ -178,6 +178,8 @@ class Stats(_Base):
     snapshots_by_cde_state: dict[str, int]
     fixed_one_click: int
     fixed_manual: int
+    open_errors: int
+    open_warnings: int
 
 
 class BudgetLine(_Base):

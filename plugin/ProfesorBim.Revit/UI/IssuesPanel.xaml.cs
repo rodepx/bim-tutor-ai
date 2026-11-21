@@ -386,8 +386,7 @@ public partial class IssuesPanel : UserControl
         var ids = _app.Session.BackendIdsFor(issue.ElementGuid, issue.RuleId);
         var feedback = new FeedbackCreate
         {
-            // element_guid es obligatorio en el contrato: para reglas de documento se envía "DOC:<archivo>".
-            ElementGuid = issue.ElementGuid ?? "DOC:" + _app.Session.FileName,
+            ElementGuid = issue.ElementGuid, // null en reglas de documento (R06)
             RuleId = issue.RuleId,
             IssueId = ids.Length > 0 ? ids[0] : null,
             Reason = answer.Value.Reason,

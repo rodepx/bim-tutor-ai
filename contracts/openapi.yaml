@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agente Profesor BIM — API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contrato entre plugin Revit, backend, módulo IA y dashboard.
     Convenciones:
@@ -118,7 +118,7 @@ paths:
     patch:
       tags: [modelo]
       operationId: setCdeState
-      description: Mueve el snapshot en el CDE. SHARED exige 0 issues `error` abiertos (409 si no).
+      description: Mueve el snapshot en el CDE. SHARED y PUBLISHED exigen 0 issues `error` abiertos en ese snapshot (409 si no).
       parameters: [{ $ref: "#/components/parameters/SnapshotId" }]
       requestBody:
         required: true
@@ -141,6 +141,9 @@ paths:
     get:
       tags: [issues]
       operationId: listIssues
+      description: |
+        Con snapshot_id (o el más reciente si se omite) lista los issues presentes en ese snapshot.
+        `status` (filtro y respuesta) es el estado del issue DENTRO de ese snapshot, no el estado global actual.
       parameters:
         - { $ref: "#/components/parameters/SnapshotIdQuery" }
         - { name: status, in: query, schema: { $ref: "#/components/schemas/IssueStatus" } }
@@ -435,7 +438,7 @@ components:
         element_id: { type: integer, description: ElementId (solo referencia, no estable) }
         category: { type: string, example: OST_Walls }
         discipline: { $ref: "#/components/schemas/Discipline" }
-        family_name: { type: string }
+        family_name: { type: [string, "null"] }
         type_name: { type: string, example: MUR_CA_e25_FC210 }
         classification_code: { type: [string, "null"], example: Ss_25_10_30 }
         level: { type: [string, "null"], example: "Nivel 1" }
@@ -480,7 +483,7 @@ components:
         version_label: { type: string, example: v3, description: "Lo define el usuario o el plugin (p. ej. fecha+hora)" }
         cde_state: { $ref: "#/components/schemas/CdeState" }
         rules_version: { type: string, example: 0.1.0 }
-        author: { type: string }
+        author: { type: [string, "null"] }
         elements:
           type: array
           items: { $ref: "#/components/schemas/Element" }
@@ -521,7 +524,7 @@ components:
       type: object
       required: [element_guid, rule_id, reason]
       properties:
-        element_guid: { type: string }
+        element_guid: { type: [string, "null"], description: null para reglas de documento (R06) }
         rule_id: { type: string }
         issue_id: { type: [integer, "null"] }
         reason: { $ref: "#/components/schemas/FeedbackReason" }
@@ -568,13 +571,15 @@ components:
 
     Stats:
       type: object
-      required: [snapshot_id, cde_state, element_count, conformance_pct, by_discipline, by_rule, feedback_by_reason, snapshots_by_cde_state, fixed_one_click, fixed_manual]
+      required: [snapshot_id, cde_state, element_count, conformance_pct, by_discipline, by_rule, feedback_by_reason, snapshots_by_cde_state, fixed_one_click, fixed_manual, open_errors, open_warnings]
       properties:
         snapshot_id: { type: integer }
         cde_state: { $ref: "#/components/schemas/CdeState" }
         element_count: { type: integer }
         conformance_pct: { type: number }
         can_move_to_shared: { type: boolean, description: true si 0 errores abiertos }
+        open_errors: { type: integer, description: Issues error abiertos en el snapshot, incluidos los de documento }
+        open_warnings: { type: integer, description: Issues warning abiertos en el snapshot, incluidos los de documento }
         by_discipline:
           type: array
           items: { $ref: "#/components/schemas/DisciplineStats" }
